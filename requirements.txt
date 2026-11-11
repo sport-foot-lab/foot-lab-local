@@ -1,0 +1,14 @@
+# Environnement Python du PC (développement) — foot-lab-local
+# Installation : python -m pip install -r requirements.txt
+# Versions testées ensemble le 10/11/2026 (Python 3.11, Windows)
+
+# dbt + ses deux adaptateurs : DuckDB (dev) et Postgres (prod)
+dbt-core==1.12.6
+dbt-duckdb==1.11.1
+dbt-postgres==1.11.0
+
+# DuckDB : même version que duckdb.exe (dlthub refuse DuckDB 2.x)
+duckdb==1.5.5
+
+# dlthub : chargement vers DuckDB (dev) et Postgres (prod), lecture parquet et bases SQL
+dlt[duckdb,postgres,parquet,sql-database]==1.32.0
