@@ -218,3 +218,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# --- foot-lab-local ---
+# Airflow
+logs/
+# dbt
+target/
+dbt_packages/
+# DuckDB (base de dev + exécutable)
+*.duckdb
+*.duckdb.wal
+duckdb.exe
+# Données locales
+data/
