@@ -1,0 +1,113 @@
+# Ton docker-compose, mis à jour pour Airflow 3 + Cosmos.
+# Repères :  # MODIFIÉ = ligne changée   # AJOUTÉ = ligne nouvelle
+# Lignes SUPPRIMÉES : version, AUTH_BACKENDS, CELERY (x2), services redis et airflow-worker.
+
+x-airflow-common: &airflow-common
+  build: .                                   # MODIFIÉ : image construite par le Dockerfile (Airflow 3.4.0 + Cosmos + dbt)
+  image: airflow-cosmos:3.4.0                # MODIFIÉ : nom de l'image construite
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor   # MODIFIÉ : plus de Celery/Redis/worker → beaucoup moins de RAM
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'    # MODIFIÉ : pas les ~80 DAG d'exemple
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager   # AJOUTÉ : écran de connexion classique (utilisateur airflow)
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/   # AJOUTÉ : obligatoire en Airflow 3
+    AIRFLOW__API_AUTH__JWT_SECRET: airflow_jwt_secret                                  # AJOUTÉ : obligatoire en Airflow 3
+    AIRFLOW__CORE__PARALLELISM: '4'          # AJOUTÉ : 4 tâches max en même temps (protège le PC)
+    AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: '1'   # AJOUTÉ : 1 exécution d'un DAG à la fois
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ./transformation:/opt/airflow/transformation   # AJOUTÉ : projet dbt lu par Cosmos
+  user: "50000:0"
+
+services:
+
+  postgres:
+    image: postgres:14-alpine
+    container_name: foot-lab-postgres
+    restart: unless-stopped
+    ports:
+      - "8181:5432"
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: foot-lab-pgadmin
+    restart: unless-stopped
+    ports:
+      - "5253:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}         # MODIFIÉ : valeur lue dans le fichier .env (non partagé)
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}   # MODIFIÉ : valeur lue dans le fichier .env (non partagé)
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username airflow \
+          --password airflow \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@example.com
+    environment:
+      <<: *airflow-common-env
+    user: "0:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  airflow-apiserver:                         # MODIFIÉ : remplace airflow-webserver (n'existe plus en Airflow 3)
+    <<: *airflow-common
+    command: api-server                      # MODIFIÉ : ex « webserver »
+    ports:
+      - "8089:8080"
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:                     # AJOUTÉ : en Airflow 3, la lecture des DAG est un service à part
+    <<: *airflow-common
+    command: dag-processor
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-triggerer:
+    <<: *airflow-common
+    command: triggerer
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
