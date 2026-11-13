@@ -39,12 +39,14 @@ import sys                # arrêter proprement le script en cas de problème (s
 import dlt                # dlthub : le moteur de chargement vers DuckDB / Postgres
 import pyarrow as pa      # pyarrow : tableaux de données en mémoire (format natif du parquet)
 import pyarrow.parquet as pq  # lecture des fichiers parquet
+from dotenv import load_dotenv  # python-dotenv : lit le fichier .env et le transforme en variables d'environnement
+
 
 # Dossier racine du dépôt (H:\projet-aws\foot-lab-local).
 # __file__ = ce fichier ; .parents[2] remonte de 2 niveaux : commun -> ingestion -> racine.
 # Grâce à ça, le script trouve data\landing quel que soit le dossier d'où on le lance.
 RACINE = pathlib.Path(__file__).resolve().parents[2]
-
+load_dotenv(RACINE / ".env")
 
 # ---------------------------------------------------------------------
 # PARTIE 1 — Les options de lancement (--cible, --sources, …)
@@ -58,8 +60,10 @@ def lire_arguments():
     # Quelles sources charger (noms des dossiers dans data/landing).
     p.add_argument("--sources", default="api_football,open_meteo",
                    help="sources à charger, séparées par des virgules")
-    # Où est la landing (par défaut : <racine>/data/landing).
-    p.add_argument("--landing", default=str(RACINE / "data" / "landing"),
+    # Où est la landing : 1) option --landing si on la tape,
+    # 2) sinon variable d'environnement LANDING_DIR (définie dans le docker-compose pour Airflow),
+    # 3) sinon <racine>/data/landing (cas du PC). Même règle que les loaders (outils_landing.py).
+    p.add_argument("--landing", default=os.environ.get("LANDING_DIR", str(RACINE / "data" / "landing")),
                    help="dossier racine de la landing locale")
     # Où est (ou sera créé) le fichier DuckDB de dev (par défaut : <racine>/data/dev.duckdb).
     p.add_argument("--duckdb", default=str(RACINE / "data" / "dev.duckdb"),
