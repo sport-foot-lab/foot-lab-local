@@ -79,6 +79,13 @@ CORRESPONDANCES = {
     "Göteborg":          ("Gothenburg", "SE"),   # sinon : une montagne du Svalbard
     "Plzeň":             ("Plzeň", "CZ"),        # sinon : l'aéroport
     "Luxembourg":        ("Luxembourg", "LU"),   # sinon : le pays (centre du Luxembourg)
+    
+    # --- Homonymes détectés par le contrôle du 13/11 (championnat national dans le mauvais pays) ---
+    # Clé = ville telle qu'écrite dans les fixtures (_ville_fixture) ; valeur = (nom envoyé à Open-Meteo, pays ISO2 attendu)
+    "Brest": ("Brest", "FR"),                     # sinon Brest en Biélorussie
+    "Brentford, Middlesex": ("Brentford", "GB"),  # sinon Brentford, South Dakota (US)
+    "Milano": ("Milan", "IT"),                    # sinon Milano, Texas (US) ; nom anglais comme Roma -> Rome
+    "Napoli": ("Naples", "IT"),                   # sinon Napoli en Gambie ; nom anglais
 }
 
 
