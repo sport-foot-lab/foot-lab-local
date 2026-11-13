@@ -15,11 +15,16 @@ x-airflow-common: &airflow-common
     AIRFLOW__API_AUTH__JWT_SECRET: airflow_jwt_secret                                  # AJOUTÉ : obligatoire en Airflow 3
     AIRFLOW__CORE__PARALLELISM: '4'          # AJOUTÉ : 4 tâches max en même temps (protège le PC)
     AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: '1'   # AJOUTÉ : 1 exécution d'un DAG à la fois
+    API_FOOTBALL_KEY: ${API_FOOTBALL_KEY}                                    # AJOUTÉ : clé lue dans .env (jamais écrite ici)
+    PG_PROD_URL: postgresql://airflow:airflow@postgres:5432/datalab          # AJOUTÉ : base de prod vue DEPUIS Docker (hôte postgres)
+    LANDING_DIR: /opt/airflow/data/landing                                   # AJOUTÉ : landing vue depuis Docker
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
     - ./transformation:/opt/airflow/transformation   # AJOUTÉ : projet dbt lu par Cosmos
+    - ./ingestion:/opt/airflow/ingestion             # AJOUTÉ : scripts dlthub (loaders) lancés par les DAG
+    - ./data:/opt/airflow/data                       # AJOUTÉ : la MÊME landing que sur le PC
   user: "50000:0"
 
 services:
