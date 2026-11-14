@@ -1,0 +1,30 @@
+# =====================================================================
+# profiles.yml — connexions dbt : dev (DuckDB) et prod (Postgres)
+# Aucun secret ici : les valeurs sensibles viennent de variables d'environnement.
+# env_var('NOM', 'défaut') = lit la variable NOM ; si elle n'existe pas, prend la valeur par défaut.
+# =====================================================================
+foot_lab:                    # = profile: dans dbt_project.yml
+  target: dev                # target utilisé si on ne précise pas --target
+  outputs:
+
+    # ---------------- DEV : DuckDB, le fichier data\dev.duckdb ----------------
+    dev:
+      type: duckdb
+      # PC     : défaut ../data/dev.duckdb (relatif à transformation\, d'où on lance dbt)
+      # Airflow: DBT_DUCKDB_PATH=/opt/airflow/data/dev.duckdb (défini dans le docker-compose en T4)
+      path: "{{ env_var('DBT_DUCKDB_PATH', '../data/dev.duckdb') }}"
+      schema: dwh_silver     # schéma par défaut (chaque dossier dwh_* précise le sien)
+      threads: 1             # DuckDB = un seul écrivain : modèles construits un par un
+
+    # ---------------- PROD : Postgres, base datalab ----------------
+    prod:
+      type: postgres
+      # PC : localhost:8181 (port publié par Docker) ; Airflow : postgres:5432 (défini en T4)
+      host: "{{ env_var('DBT_PG_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_PG_PORT', '8181') | as_number }}"   # as_number : le port doit être un nombre
+      user: "{{ env_var('DBT_PG_USER') }}"                         # pas de défaut : obligatoire
+      # Le préfixe DBT_ENV_SECRET_ fait que dbt MASQUE cette valeur dans ses logs.
+      password: "{{ env_var('DBT_ENV_SECRET_PG_PASSWORD') }}"
+      dbname: datalab
+      schema: dwh_silver
+      threads: 4             # Postgres accepte plusieurs écritures en parallèle
