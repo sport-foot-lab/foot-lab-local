@@ -232,3 +232,10 @@ dbt_packages/
 duckdb.exe
 # Données locales
 data/
+
+
+
+# --- dbt (transformation\) : fichiers générés, jamais versionnés ---
+transformation/target/
+transformation/dbt_packages/
+transformation/.user.yml

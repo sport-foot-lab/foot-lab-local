@@ -1,0 +1,46 @@
+# =====================================================================
+# dbt_project.yml — carte d'identité du projet dbt foot_lab
+# =====================================================================
+
+# Nom du projet (minuscules et _). Sert aussi de préfixe dans les sections models: et snapshots:.
+name: foot_lab
+version: "1.0.0"
+
+# Nom du "profil" de connexion à utiliser, défini dans profiles.yml (même dossier).
+profile: foot_lab
+
+# Garde-fou : dbt refuse de tourner avec une autre version que la 1.12.x
+# (celle du PC ET de l'image Airflow -> dev et prod identiques).
+require-dbt-version: [">=1.12.0", "<1.13.0"]
+
+# Où dbt cherche chaque type de fichier (chemins relatifs au dossier transformation\).
+model-paths: ["models"]        # modèles SQL (dwh_bronze, dwh_silver, dwh_gold)
+macro-paths: ["macros"]        # macros Jinja
+test-paths: ["tests"]          # tests SQL personnalisés
+seed-paths: ["seeds"]          # petits fichiers CSV de référence
+snapshot-paths: ["snapshots"]  # historisation SCD2
+analysis-paths: ["analyses"]   # requêtes d'analyse non matérialisées
+
+# Dossiers supprimés par "dbt clean" (fichiers générés, jamais versionnés).
+clean-targets: ["target", "dbt_packages"]
+
+# Comment construire chaque couche. Règle du projet : DOSSIER = SCHÉMA (préfixe dwh_ = construit par dbt).
+#   clé (dwh_bronze…) : nom du DOSSIER dans models\
+#   +schema           : schéma de la base où créer les tables
+#   +materialized     : table = dbt recrée une vraie table à chaque exécution
+models:
+  foot_lab:
+    dwh_bronze:
+      +schema: dwh_bronze
+      +materialized: table
+    dwh_silver:
+      +schema: dwh_silver
+      +materialized: table
+    dwh_gold:
+      +schema: dwh_gold
+      +materialized: table
+
+# Les snapshots (historique SCD2) vont tous dans le schéma dwh_snapshot.
+snapshots:
+  foot_lab:
+    +schema: dwh_snapshot
