@@ -1,0 +1,29 @@
+# =====================================================================
+# _sources.yml : les tables brutes que dbt LIT sans jamais les modifier
+# =====================================================================
+version: 2                    # format des fichiers YAML de dbt (toujours 2)
+
+sources:
+  - name: bronze              # nom logique, 1er argument de source('bronze', ...)
+    schema: bronze            # schéma physique écrit par dlthub (dev ET prod)
+    # Pas de "database:" : dbt prend celle du target
+    #   dev  -> dev     (nom du fichier dev.duckdb)
+    #   prod -> datalab (base Postgres)
+    description: "Tables brutes chargées par dlthub (landing -> bronze). Jamais modifiées par dbt."
+
+
+    tables:                   # une entrée par table bronze, 2e argument de source(...)
+      - name: api_football_fixtures
+        description: "Matchs API-Football (1 ligne par match et par dépôt)."
+      - name: api_football_topscorers
+        description: "Meilleurs buteurs par ligue et saison."
+      - name: api_football_topassists
+        description: "Meilleurs passeurs par ligue et saison."
+      - name: api_football_topyellowcards
+        description: "Joueurs les plus avertis (cartons jaunes) par ligue et saison."
+      - name: api_football_topredcards
+        description: "Joueurs les plus exclus (cartons rouges) par ligue et saison."
+      - name: open_meteo_geocodage
+        description: "Géocodage Open-Meteo des villes de stade (_ville_fixture)."
+      - name: open_meteo_meteo_journaliere
+        description: "Météo journalière Open-Meteo par coordonnées et par jour."
