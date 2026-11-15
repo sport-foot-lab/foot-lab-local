@@ -30,6 +30,11 @@
    ⚠️ DuckDB UI FERMÉE pendant les exécutions (un seul écrivain DuckDB) :
       sinon bronze.dev est ROUGE (rien d'abîmé, l'exécution suivante rattrape).
 
+ SIGNAUX VERS dbt (Assets Airflow 3)
+   bronze.dev  vert -> signal foot_lab_bronze_dev  -> déclenche le DAG foot_lab_dbt_dev
+   bronze.prod vert -> signal foot_lab_bronze_prod -> attendu (avec "dbt dev vert") par foot_lab_dbt_prod
+   Les signaux sont définis UNE fois dans foot_lab_commun.py.
+
  PLANIFICATION
    schedule="0 */2 * * *" : toutes les 2 heures (test). Plus tard : "@daily" (1 fois par jour).
    Si tout est déjà complet en landing, chaque exécution s'arrête sur « Rien à charger » : 0 appel API.
@@ -41,7 +46,7 @@ from datetime import datetime
 
 from airflow.sdk import DAG, TaskGroup                              # Airflow 3 : DAG + groupes de tâches
 from airflow.providers.standard.operators.bash import BashOperator  # tâche = une commande shell
-from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig   # Cosmos : dbt -> tâches Airflow
+from foot_lab_commun import ASSET_BRONZE_DEV, ASSET_BRONZE_PROD      # signaux vers les DAG dbt
 
 
 # ---------------------------------------------------------------------
@@ -59,18 +64,9 @@ TABLES_TOP = ["topscorers", "topassists", "topyellowcards", "topredcards"]
 # Les 2 environnements du bronze : même script, seule la destination change
 CIBLES_BRONZE = ["dev", "prod"]
 
-# dbt (Cosmos) : projet, exécutable et profil VUS DEPUIS le conteneur
-DBT_PROJET = "/opt/airflow/transformation"            # = ton dossier transformation\ (monté par le compose)
-DBT_EXE = "/opt/airflow/dbt_venv/bin/dbt"             # dbt de l'image (dbt-duckdb + dbt-postgres)
+# Signal émis par chaque tâche bronze quand elle est verte (déclenche les DAG dbt)
+ASSETS_BRONZE = {"dev": ASSET_BRONZE_DEV, "prod": ASSET_BRONZE_PROD}
 
-
-def profil_dbt(target):
-    """Profil dbt foot_lab pour un target (dev ou prod), lu dans transformation/profiles.yml."""
-    return ProfileConfig(
-        profile_name="foot_lab",                       # = profile: du dbt_project.yml
-        target_name=target,                            # dev -> DuckDB ; prod -> Postgres
-        profiles_yml_filepath=f"{DBT_PROJET}/profiles.yml",
-    )
 # ---------------------------------------------------------------------
 # PARTIE 2 — Le DAG
 # ---------------------------------------------------------------------
@@ -150,38 +146,10 @@ with DAG(
             BashOperator(
                 task_id=cible,                                     # nom complet : bronze.dev / bronze.prod
                 bash_command=f"{PYTHON} {INGESTION}/commun/landing_vers_bronze.py --cible {cible}",
+                outlets=[ASSETS_BRONZE[cible]],                    # vert -> signal foot_lab_bronze_<cible>
             )
 
     # Une LISTE à gauche de « >> » = « quand TOUS ces éléments sont verts, puis... ».
     # Le groupe bronze attend les 5 tâches foot ET les 2 tâches météo.
     # Si une seule est rouge, aucun bronze n'est chargé (règle Airflow par défaut : tout doit être vert).
     [groupe_foot, groupe_meteo] >> groupe_bronze
-
-
-
-        # -----------------------------------------------------------------
-    # 2.5 dbt avec Cosmos : bronze -> dwh_bronze, DEV puis PROD
-    #     Cosmos lit le projet dbt et crée 1 tâche Airflow PAR MODÈLE
-    #     (aujourd'hui : api_football_fixtures_run). Un nouveau modèle
-    #     apparaît tout seul dans le Graph, sans toucher à ce fichier.
-    #     MÊME projet, MÊME code : seul le target change -> dev et prod ISO.
-    # -----------------------------------------------------------------
-    dbt_dev = DbtTaskGroup(
-        group_id="dbt_dev",                                        # tâches : dbt_dev.<modèle>_run
-        project_config=ProjectConfig(DBT_PROJET),                  # où est le dbt_project.yml
-        profile_config=profil_dbt("dev"),                          # target dev -> DuckDB
-        execution_config=ExecutionConfig(dbt_executable_path=DBT_EXE),
-        operator_args={"install_deps": False},                     # pas de packages dbt -> pas de "dbt deps"
-    )
-
-    dbt_prod = DbtTaskGroup(
-        group_id="dbt_prod",                                       # tâches : dbt_prod.<modèle>_run
-        project_config=ProjectConfig(DBT_PROJET),
-        profile_config=profil_dbt("prod"),                         # target prod -> Postgres
-        execution_config=ExecutionConfig(dbt_executable_path=DBT_EXE),
-        operator_args={"install_deps": False},
-    )
-
-    # bronze (dev + prod) vert -> dbt DEV -> si vert -> dbt PROD
-    # (la prod n'est construite que si la dev a réussi : c'est le "contrôle avant prod")
-    groupe_bronze >> dbt_dev >> dbt_prod
