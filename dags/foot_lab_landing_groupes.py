@@ -41,10 +41,14 @@ from datetime import datetime
 
 from airflow.sdk import DAG, TaskGroup                              # Airflow 3 : DAG + groupes de tâches
 from airflow.providers.standard.operators.bash import BashOperator  # tâche = une commande shell
+from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig   # Cosmos : dbt -> tâches Airflow
+
 
 # ---------------------------------------------------------------------
 # PARTIE 1 — Chemins DANS le conteneur Airflow
 # ---------------------------------------------------------------------
+
+
 PYTHON = "/opt/airflow/ingestion_venv/bin/python"     # Python des loaders (dlthub 1.32, duckdb 1.5.5)
 INGESTION = "/opt/airflow/ingestion"                  # = ton dossier ingestion\ (monté par le compose)
 
@@ -55,7 +59,18 @@ TABLES_TOP = ["topscorers", "topassists", "topyellowcards", "topredcards"]
 # Les 2 environnements du bronze : même script, seule la destination change
 CIBLES_BRONZE = ["dev", "prod"]
 
+# dbt (Cosmos) : projet, exécutable et profil VUS DEPUIS le conteneur
+DBT_PROJET = "/opt/airflow/transformation"            # = ton dossier transformation\ (monté par le compose)
+DBT_EXE = "/opt/airflow/dbt_venv/bin/dbt"             # dbt de l'image (dbt-duckdb + dbt-postgres)
 
+
+def profil_dbt(target):
+    """Profil dbt foot_lab pour un target (dev ou prod), lu dans transformation/profiles.yml."""
+    return ProfileConfig(
+        profile_name="foot_lab",                       # = profile: du dbt_project.yml
+        target_name=target,                            # dev -> DuckDB ; prod -> Postgres
+        profiles_yml_filepath=f"{DBT_PROJET}/profiles.yml",
+    )
 # ---------------------------------------------------------------------
 # PARTIE 2 — Le DAG
 # ---------------------------------------------------------------------
@@ -141,3 +156,32 @@ with DAG(
     # Le groupe bronze attend les 5 tâches foot ET les 2 tâches météo.
     # Si une seule est rouge, aucun bronze n'est chargé (règle Airflow par défaut : tout doit être vert).
     [groupe_foot, groupe_meteo] >> groupe_bronze
+
+
+
+        # -----------------------------------------------------------------
+    # 2.5 dbt avec Cosmos : bronze -> dwh_bronze, DEV puis PROD
+    #     Cosmos lit le projet dbt et crée 1 tâche Airflow PAR MODÈLE
+    #     (aujourd'hui : api_football_fixtures_run). Un nouveau modèle
+    #     apparaît tout seul dans le Graph, sans toucher à ce fichier.
+    #     MÊME projet, MÊME code : seul le target change -> dev et prod ISO.
+    # -----------------------------------------------------------------
+    dbt_dev = DbtTaskGroup(
+        group_id="dbt_dev",                                        # tâches : dbt_dev.<modèle>_run
+        project_config=ProjectConfig(DBT_PROJET),                  # où est le dbt_project.yml
+        profile_config=profil_dbt("dev"),                          # target dev -> DuckDB
+        execution_config=ExecutionConfig(dbt_executable_path=DBT_EXE),
+        operator_args={"install_deps": False},                     # pas de packages dbt -> pas de "dbt deps"
+    )
+
+    dbt_prod = DbtTaskGroup(
+        group_id="dbt_prod",                                       # tâches : dbt_prod.<modèle>_run
+        project_config=ProjectConfig(DBT_PROJET),
+        profile_config=profil_dbt("prod"),                         # target prod -> Postgres
+        execution_config=ExecutionConfig(dbt_executable_path=DBT_EXE),
+        operator_args={"install_deps": False},
+    )
+
+    # bronze (dev + prod) vert -> dbt DEV -> si vert -> dbt PROD
+    # (la prod n'est construite que si la dev a réussi : c'est le "contrôle avant prod")
+    groupe_bronze >> dbt_dev >> dbt_prod
