@@ -30,6 +30,11 @@
    ⚠️ DuckDB UI FERMÉE pendant les exécutions (un seul écrivain DuckDB) :
       sinon bronze.dev est ROUGE (rien d'abîmé, l'exécution suivante rattrape).
 
+ SIGNAUX VERS dbt (Assets Airflow 3)
+   bronze.dev  vert -> signal foot_lab_bronze_dev  -> déclenche le DAG foot_lab_dbt_dev
+   bronze.prod vert -> signal foot_lab_bronze_prod -> attendu (avec "dbt dev vert") par foot_lab_dbt_prod
+   Les signaux sont définis UNE fois dans foot_lab_commun.py.
+
  PLANIFICATION
    schedule="0 */2 * * *" : toutes les 2 heures (test). Plus tard : "@daily" (1 fois par jour).
    Si tout est déjà complet en landing, chaque exécution s'arrête sur « Rien à charger » : 0 appel API.
@@ -41,10 +46,14 @@ from datetime import datetime
 
 from airflow.sdk import DAG, TaskGroup                              # Airflow 3 : DAG + groupes de tâches
 from airflow.providers.standard.operators.bash import BashOperator  # tâche = une commande shell
+from foot_lab_commun import ASSET_BRONZE_DEV, ASSET_BRONZE_PROD      # signaux vers les DAG dbt
+
 
 # ---------------------------------------------------------------------
 # PARTIE 1 — Chemins DANS le conteneur Airflow
 # ---------------------------------------------------------------------
+
+
 PYTHON = "/opt/airflow/ingestion_venv/bin/python"     # Python des loaders (dlthub 1.32, duckdb 1.5.5)
 INGESTION = "/opt/airflow/ingestion"                  # = ton dossier ingestion\ (monté par le compose)
 
@@ -55,6 +64,8 @@ TABLES_TOP = ["topscorers", "topassists", "topyellowcards", "topredcards"]
 # Les 2 environnements du bronze : même script, seule la destination change
 CIBLES_BRONZE = ["dev", "prod"]
 
+# Signal émis par chaque tâche bronze quand elle est verte (déclenche les DAG dbt)
+ASSETS_BRONZE = {"dev": ASSET_BRONZE_DEV, "prod": ASSET_BRONZE_PROD}
 
 # ---------------------------------------------------------------------
 # PARTIE 2 — Le DAG
@@ -135,6 +146,7 @@ with DAG(
             BashOperator(
                 task_id=cible,                                     # nom complet : bronze.dev / bronze.prod
                 bash_command=f"{PYTHON} {INGESTION}/commun/landing_vers_bronze.py --cible {cible}",
+                outlets=[ASSETS_BRONZE[cible]],                    # vert -> signal foot_lab_bronze_<cible>
             )
 
     # Une LISTE à gauche de « >> » = « quand TOUS ces éléments sont verts, puis... ».
