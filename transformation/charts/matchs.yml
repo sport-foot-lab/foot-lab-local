@@ -1,0 +1,98 @@
+# =====================================================================
+# charts/matchs.yml — board "Matchs : vue d'ensemble" (dev, DuckDB)
+# Lit dwh_bronze.api_football_fixtures (construit par dbt)
+# =====================================================================
+title: "Matchs : vue d'ensemble"   # titre affiché en haut de la page
+source: foot_dev                   # = la source déclarée dans dbt_charts.yml
+
+# ---------------------------------------------------------------------
+# FILTRES : chaque variable = une liste déroulante en haut de la page
+#   column: schéma.table.colonne -> la liste contient les valeurs de la colonne
+#   Au départ : "All" (aucun filtre)
+# ---------------------------------------------------------------------
+variables:
+  ligue:
+    column: dwh_bronze.api_football_fixtures.nom_ligue
+  saison:
+    column: dwh_bronze.api_football_fixtures.saison
+
+# ---------------------------------------------------------------------
+# REQUÊTES : le SQL fait tous les calculs (1 ligne = 1 barre / 1 part)
+#   {{ filter('colonne', variable) }} = "colonne = valeur choisie"
+#   Si le filtre est sur "All", il devient une condition toujours vraie
+# ---------------------------------------------------------------------
+queries:
+  nb_matchs:                       # 1 seule valeur : le nombre de matchs
+    sql: |
+      SELECT count(*) AS nb_matchs
+      FROM dwh_bronze.api_football_fixtures
+      WHERE est_derniere_version
+        AND {{ filter('nom_ligue', ligue) }}
+        AND {{ filter('saison', saison) }}
+    formats:
+      nb_matchs: integer           # affiche 6,048 au lieu de "6k"
+  buts_par_ligue:                  # moyenne de buts par match, par compétition
+    sql: |
+      SELECT nom_ligue,
+             round(avg(buts_domicile + buts_exterieur), 2) AS buts_par_match
+      FROM dwh_bronze.api_football_fixtures
+      WHERE est_derniere_version
+        AND {{ filter('nom_ligue', ligue) }}
+        AND {{ filter('saison', saison) }}
+      GROUP BY nom_ligue
+      ORDER BY buts_par_match DESC
+  resultats:                       # nombre de matchs par résultat (pour le camembert)
+    sql: |
+      SELECT resultat, count(*) AS nb_matchs
+      FROM dwh_bronze.api_football_fixtures
+      WHERE est_derniere_version
+        AND {{ filter('nom_ligue', ligue) }}
+        AND {{ filter('saison', saison) }}
+      GROUP BY resultat
+  buts_par_match:                  # 1 ligne par match : son nombre total de buts (pour l'histogramme)
+    sql: |
+      SELECT buts_domicile + buts_exterieur AS buts_total
+      FROM dwh_bronze.api_football_fixtures
+      WHERE est_derniere_version
+        AND {{ filter('nom_ligue', ligue) }}
+        AND {{ filter('saison', saison) }}
+
+# ---------------------------------------------------------------------
+# GRAPHIQUES : chaque graphique dessine UNE requête
+# ---------------------------------------------------------------------
+charts:
+  kpi_matchs:                      # grand chiffre (pas de title pour un kpi)
+    type: kpi
+    query: nb_matchs
+    value: nb_matchs
+    support:
+      label: "matchs (dernière version)"
+  barres_ligues:                   # diagramme en barres
+    type: bar
+    query: buts_par_ligue
+    x: nom_ligue
+    y: buts_par_match
+    title: "Buts par match, par compétition"
+  camembert_resultats:             # camembert
+    type: pie
+    query: resultats
+    theta: nb_matchs
+    color: resultat
+    title: "Répartition des résultats"
+  histo_buts:                      # histogramme : compte les matchs par nombre de buts
+    type: histogram
+    query: buts_par_match
+    x: buts_total
+    title: "Distribution du nombre de buts par match"
+
+# ---------------------------------------------------------------------
+# MISE EN PAGE : rows = lignes empilées ; cols = côte à côte
+# ---------------------------------------------------------------------
+rows:
+  - kpi_matchs
+  - cols:
+      - barres_ligues
+      - camembert_resultats
+  - histo_buts
+
+  

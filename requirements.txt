@@ -12,3 +12,6 @@ duckdb==1.5.5
 
 # dlthub : chargement vers DuckDB (dev) et Postgres (prod), lecture parquet et bases SQL
 dlt[duckdb,postgres,parquet,sql-database]==1.32.0
+
+# Dashboards en YAML (bêta) : CLI dct
+dbt-charts==0.11.1
