@@ -239,3 +239,7 @@ data/
 transformation/target/
 transformation/dbt_packages/
 transformation/.user.yml
+
+
+# --- dbt Charts : images/PDF générés par "dct render", jamais versionnés ---
+transformation/renders/

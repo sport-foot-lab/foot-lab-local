@@ -1,0 +1,9 @@
+# =====================================================================
+# dbt_charts.yml — configuration de dbt Charts (dashboards en YAML)
+# Les boards (dashboards) sont dans le dossier charts\ ; ce fichier dit
+# seulement OÙ lire les données. Aucun secret ici.
+# =====================================================================
+sources:
+  foot_dev:                       # nom de la source, repris par "source:" dans chaque board
+    type: duckdb                  # lecture directe du fichier DuckDB (lecture seule)
+    path: ../data/dev.duckdb      # relatif à transformation\ (= data\dev.duckdb du projet)
