@@ -24,6 +24,7 @@ with DAG(
     start_date=datetime(2026, 11, 1),
     catchup=False,
     max_active_runs=1,
+    max_active_tasks=1,  # DuckDB : un seul écrivain à la fois
     is_paused_upon_creation=False,       # créé ACTIF : la dev suit automatiquement le bronze
     default_args={"retries": 0},
     tags=["foot-lab", "dbt", "dev"],
