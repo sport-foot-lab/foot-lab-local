@@ -1,0 +1,94 @@
+# =====================================================================
+# _unit_tests_dwh_bronze.yml — tests unitaires des modèles dwh_bronze
+# Un test unitaire vérifie la LOGIQUE du SQL, pas les vraies données :
+#   given  = lignes d'entrée inventées (remplacent la table bronze)
+#   expect = lignes de sortie attendues
+# dbt exécute le modèle sur "given" et compare avec "expect".
+# Colonnes absentes de given -> NULL ; seules les colonnes de expect sont comparées.
+# =====================================================================
+version: 2
+
+unit_tests:
+  - name: topscorers_nettoyage_typage_version
+    description: "Données salies en entrée -> sortie propre attendue (cm/kg, espaces, essayer_cast, flag de version)."
+    model: api_football_topscorers          # le modèle testé
+
+    # ---------------- ENTRÉE : 5 lignes bronze "salies" ----------------
+    given:
+      - input: source('bronze', 'api_football_topscorers')   # la table remplacée
+        rows:
+          # Joueur 1, dépôt 1 (13/11) : espaces parasites dans le nom, "cm" et "kg"
+          - {player__id: 1, statistics__team__id: 10, statistics__league__id: 61, statistics__league__season: 2023, player__name: "  W.   Ben Yedder ", player__height: "170 cm", player__weight: "68 kg", statistics__games__rating: "7.128125", player__birth__date: "1990-08-12", _fichier_source: "depot_1.parquet", _date_depot: "2026-11-13 14:00:00+00"}
+          # Joueur 1, dépôt 2 (20/11), plus récent : doit être la seule "dernière version"
+          - {player__id: 1, statistics__team__id: 10, statistics__league__id: 61, statistics__league__season: 2023, player__name: "W. Ben Yedder", player__height: "170", player__weight: "68", statistics__games__rating: "7.2", player__birth__date: "1990-08-12", _fichier_source: "depot_2.parquet", _date_depot: "2026-11-20 14:00:00+00"}
+          # Joueur 2 : valeurs mal formées -> NULL au lieu de faire planter le modèle
+          - {player__id: 2, statistics__team__id: 20, statistics__league__id: 61, statistics__league__season: 2023, player__name: "J. David", player__height: " 181 cm ", player__weight: "", statistics__games__rating: "N/A", player__birth__date: "12/08/1990", _fichier_source: "depot_1.parquet", _date_depot: "2026-11-13 14:00:00+00"}
+          # Joueur 8 : 2 équipes, MÊME dépôt -> 2 paquets différents, les 2 lignes "true"
+          - {player__id: 8, statistics__team__id: 165, statistics__league__id: 78, statistics__league__season: 2022, player__name: "Raphaël Guerreiro", player__height: "170", player__weight: "67", statistics__games__rating: "7", player__birth__date: "1993-12-22", _fichier_source: "depot_1.parquet", _date_depot: "2026-11-13 14:00:00+00"}
+          - {player__id: 8, statistics__team__id: 157, statistics__league__id: 78, statistics__league__season: 2022, player__name: "Raphaël Guerreiro", player__height: "170", player__weight: "67", statistics__games__rating: "7", player__birth__date: "1993-12-22", _fichier_source: "depot_1.parquet", _date_depot: "2026-11-13 14:00:00+00"}
+
+    # ---------------- SORTIE ATTENDUE : 5 lignes propres ----------------
+    # note_moyenne entre guillemets avec 6 décimales : la colonne est DECIMAL(10,6)
+    # (Postgres compare "7.200000" et non "7.2")
+    expect:
+      rows:
+          - {id_joueur: 1, id_equipe: 10,  _fichier_source: "depot_1.parquet", nom_joueur: "W. Ben Yedder",     taille_cm: 170, poids_kg: 68,   note_moyenne: "7.128125", date_naissance: "1990-08-12", est_derniere_version: false}
+          - {id_joueur: 1, id_equipe: 10,  _fichier_source: "depot_2.parquet", nom_joueur: "W. Ben Yedder",     taille_cm: 170, poids_kg: 68,   note_moyenne: "7.200000", date_naissance: "1990-08-12", est_derniere_version: true}
+          - {id_joueur: 2, id_equipe: 20,  _fichier_source: "depot_1.parquet", nom_joueur: "J. David",          taille_cm: 181, poids_kg: null, note_moyenne: null,       date_naissance: null,         est_derniere_version: true}
+          - {id_joueur: 8, id_equipe: 165, _fichier_source: "depot_1.parquet", nom_joueur: "Raphaël Guerreiro", taille_cm: 170, poids_kg: 67,   note_moyenne: "7.000000", date_naissance: "1993-12-22", est_derniere_version: true}
+          - {id_joueur: 8, id_equipe: 157, _fichier_source: "depot_1.parquet", nom_joueur: "Raphaël Guerreiro", taille_cm: 170, poids_kg: 67,   note_moyenne: "7.000000", date_naissance: "1993-12-22", est_derniere_version: true}
+
+
+
+
+
+          
+  # =================================================================
+  # MÉTÉO : time texte -> date, CASE du code météo, flag de version
+  # =================================================================
+  - name: meteo_date_libelle_version
+    description: "time texte -> date (NULL si mal formé), code météo décodé (Inconnu si code imprévu), flag de version."
+    model: open_meteo_meteo_journaliere
+
+    # ---------------- ENTRÉE : 3 lignes bronze ----------------
+    given:
+      - input: source('bronze', 'open_meteo_meteo_journaliere')
+        rows:
+          # Brest, 12/08/2023, dépôt 1 : "Couvert"
+          - {_param_latitude: 48.39, _param_longitude: -4.49, time: "2023-08-12", weather_code: 3,  _fichier_source: "depot_1.parquet", _date_depot: "2026-11-13 14:00:00+00"}
+          # Même lieu, même jour, dépôt 2 plus récent : c'est lui la dernière version
+          - {_param_latitude: 48.39, _param_longitude: -4.49, time: "2023-08-12", weather_code: 61, _fichier_source: "depot_2.parquet", _date_depot: "2026-11-20 14:00:00+00"}
+          # Date au mauvais format + code 42 qui n'existe pas dans le CASE
+          - {_param_latitude: 45.46, _param_longitude: 9.19,  time: "12/08/2023", weather_code: 42, _fichier_source: "depot_1.parquet", _date_depot: "2026-11-13 14:00:00+00"}
+
+    # ---------------- SORTIE ATTENDUE ----------------
+    expect:
+      rows:
+          - {latitude_demandee: 48.39, _fichier_source: "depot_1.parquet", date_meteo: "2023-08-12", code_meteo: 3,  libelle_meteo: "Couvert",      est_derniere_version: false}
+          - {latitude_demandee: 48.39, _fichier_source: "depot_2.parquet", date_meteo: "2023-08-12", code_meteo: 61, libelle_meteo: "Pluie faible", est_derniere_version: true}
+          - {latitude_demandee: 45.46, _fichier_source: "depot_1.parquet", date_meteo: null,         code_meteo: 42, libelle_meteo: "Inconnu (42)", est_derniere_version: true}
+
+  # =================================================================
+  # GÉOCODAGE : espaces nettoyés + ville corrigée par un dépôt plus récent
+  # =================================================================
+  - name: geocodage_ville_corrigee_derniere_version
+    description: "Espaces nettoyés dans la ville ; un dépôt plus récent corrige la ville (Brest BY -> FR)."
+    model: open_meteo_geocodage
+
+    # ---------------- ENTRÉE : 3 lignes bronze ----------------
+    given:
+      - input: source('bronze', 'open_meteo_geocodage')
+        rows:
+          # Brest : 1er dépôt trouvé en Biélorussie (comme dans tes vraies données)
+          - {_ville_fixture: "Brest", name: "Brest", country_code: "BY", _fichier_source: "depot_1.parquet", _date_depot: "2026-11-13 14:00:00+00"}
+          # Brest : dépôt suivant, corrigé en France -> dernière version
+          - {_ville_fixture: "Brest", name: "Brest", country_code: "FR", _fichier_source: "depot_2.parquet", _date_depot: "2026-11-13 16:00:00+00"}
+          # Ville avec espaces parasites
+          - {_ville_fixture: "  Leeds,   West Yorkshire ", name: "Leeds", country_code: "GB", _fichier_source: "depot_1.parquet", _date_depot: "2026-11-13 14:00:00+00"}
+
+    # ---------------- SORTIE ATTENDUE ----------------
+    expect:
+      rows:
+          - {ville_stade_complete: "Brest",                 code_pays: "BY", est_derniere_version: false}
+          - {ville_stade_complete: "Brest",                 code_pays: "FR", est_derniere_version: true}
+          - {ville_stade_complete: "Leeds, West Yorkshire", code_pays: "GB", est_derniere_version: true}
