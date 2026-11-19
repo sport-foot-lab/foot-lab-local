@@ -15,6 +15,7 @@ x-airflow-common: &airflow-common
     AIRFLOW__API_AUTH__JWT_SECRET: airflow_jwt_secret                                  # AJOUTÉ : obligatoire en Airflow 3
     AIRFLOW__CORE__PARALLELISM: '4'          # AJOUTÉ : 4 tâches max en même temps (protège le PC)
     AIRFLOW__CORE__MAX_ACTIVE_RUNS_PER_DAG: '1'   # AJOUTÉ : 1 exécution d'un DAG à la fois
+    AIRFLOW__CORE__MAX_TEMPLATED_FIELD_LENGTH: '100000'   # AJOUTÉ : SQL compilé complet dans "Modèles rendus" (défaut 4096 caractères)   
     API_FOOTBALL_KEY: ${API_FOOTBALL_KEY}                                    # AJOUTÉ : clé lue dans .env (jamais écrite ici)
     PG_PROD_URL: postgresql://airflow:airflow@postgres:5432/datalab          # AJOUTÉ : base de prod vue DEPUIS Docker (hôte postgres)
     LANDING_DIR: /opt/airflow/data/landing                                   # AJOUTÉ : landing vue depuis Docker
