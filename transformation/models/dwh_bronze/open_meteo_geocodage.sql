@@ -1,17 +1,17 @@
 -- =====================================================================
 -- dwh_bronze.open_meteo_geocodage
--- Géocodage Open-Meteo des villes de stade : 1 ligne par ville ET par dépôt
--- Un dépôt plus récent peut CORRIGER une ville mal géocodée
--- (ex. Brest : 1er dépôt en Biélorussie (BY), dépôt suivant en France (FR))
--- -> est_derniere_version = le géocodage à utiliser
+-- Géocodage Open-Meteo des villes de stade : 1 ligne par ville
+-- = la version EN COURS du snapshot (dbt_valid_to IS NULL)
+-- L'historique des dépôts est dans dwh_snapshot.open_meteo_geocodage_snapshot
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- CTE 1 : la source brute, rien d'autre
+-- CTE 1 : la version en cours de chaque ville, lue dans le snapshot
 -- ---------------------------------------------------------------------
 WITH source AS (
     SELECT *
-    FROM {{ source('bronze', 'open_meteo_geocodage') }}
+    FROM {{ ref('open_meteo_geocodage_snapshot') }}   -- historique SCD2 (colonnes brutes)
+    WHERE dbt_valid_to IS NULL                         -- seulement la version en cours
 ),
 
 -- ---------------------------------------------------------------------
@@ -58,23 +58,7 @@ renomme AS (
         _date_chargement_bronze,
         _dlt_load_id                                              AS _id_chargement_dlt
     FROM source
-),
-
--- ---------------------------------------------------------------------
--- CTE 3 : flag de version (aucun dépôt supprimé)
--- Clé = la ville du match : 1 paquet par ville, le dépôt le plus récent gagne
--- ---------------------------------------------------------------------
-final AS (
-    SELECT
-        *,
-        ROW_NUMBER() OVER (
-            PARTITION BY ville_stade_complete
-            ORDER BY _date_depot DESC,
-                     _fichier_source DESC
-        ) = 1                                                     AS est_derniere_version
-    FROM renomme
 )
 
-SELECT * FROM final
-
-
+-- Plus de flag est_derniere_version : le filtre dbt_valid_to IS NULL (CTE 1) l'a remplacé
+SELECT * FROM renomme
