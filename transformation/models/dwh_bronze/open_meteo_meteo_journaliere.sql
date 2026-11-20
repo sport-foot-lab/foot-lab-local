@@ -10,7 +10,8 @@
 -- ---------------------------------------------------------------------
 WITH source AS (
     SELECT *
-    FROM {{ source('bronze', 'open_meteo_meteo_journaliere') }}
+    FROM {{ ref('open_meteo_meteo_journaliere_snapshot') }}   -- historique SCD2 (colonnes brutes)
+    WHERE dbt_valid_to IS NULL                                 -- seulement la version en cours
 ),
 
 -- ---------------------------------------------------------------------
@@ -93,21 +94,6 @@ enrichi AS (
             ELSE 'Inconnu (' || CAST(code_meteo AS VARCHAR) || ')'  -- un code imprévu apparaît au lieu d'être perdu
         END                                                       AS libelle_meteo
     FROM renomme
-),
-
--- ---------------------------------------------------------------------
--- CTE 4 : flag de version (aucun dépôt supprimé)
--- Clé = coordonnées demandées + jour
--- ---------------------------------------------------------------------
-final AS (
-    SELECT
-        *,
-        ROW_NUMBER() OVER (
-            PARTITION BY latitude_demandee, longitude_demandee, date_meteo
-            ORDER BY _date_depot DESC,
-                     _fichier_source DESC
-        ) = 1                                                     AS est_derniere_version
-    FROM enrichi
 )
 
-SELECT * FROM final
+SELECT * FROM enrichi

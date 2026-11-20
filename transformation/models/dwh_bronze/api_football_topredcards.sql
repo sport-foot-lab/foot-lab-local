@@ -10,7 +10,8 @@
 -- ---------------------------------------------------------------------
 WITH source AS (
     SELECT *
-    FROM {{ source('bronze', 'api_football_topredcards') }}
+    FROM {{ ref('api_football_topredcards_snapshot') }}   -- historique SCD2 (colonnes brutes)
+    WHERE dbt_valid_to IS NULL                            -- seulement la version en cours
 ),
 
 -- ---------------------------------------------------------------------
@@ -114,21 +115,7 @@ renomme AS (
         _date_chargement_bronze,
         _dlt_load_id                                              AS _id_chargement_dlt
     FROM nettoye
-),
-
--- ---------------------------------------------------------------------
--- CTE 4 : flag de version (aucun dépôt supprimé)
--- Clé = joueur + ligue + saison + équipe
--- ---------------------------------------------------------------------
-final AS (
-    SELECT
-        *,
-        ROW_NUMBER() OVER (
-            PARTITION BY id_joueur, id_ligue, saison, id_equipe
-            ORDER BY _date_depot DESC,
-                     _fichier_source DESC
-        ) = 1                                                     AS est_derniere_version
-    FROM renomme
 )
 
-SELECT * FROM final
+
+SELECT * FROM renomme

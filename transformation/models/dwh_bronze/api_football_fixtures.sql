@@ -1,18 +1,18 @@
 -- =====================================================================
 -- dwh_bronze.api_football_fixtures
--- 1 ligne par match ET par dépôt (tous les dépôts sont gardés)
--- Renommage FR, typage, nettoyage, décodage, flag est_derniere_version
+-- 1 ligne par match = la version EN COURS du snapshot (dbt_valid_to IS NULL)
+-- L'historique des dépôts est dans dwh_snapshot.api_football_fixtures_snapshot
+-- Renommage FR, typage, nettoyage, décodage
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- CTE 1 : la source brute, rien d'autre
--- source('bronze', ...) = la table déclarée dans _sources.yml
+-- CTE 1 : la version en cours de chaque match, lue dans le snapshot
 -- ---------------------------------------------------------------------
 WITH source AS (
     SELECT *
-    FROM {{ source('bronze', 'api_football_fixtures') }}
+    FROM {{ ref('api_football_fixtures_snapshot') }}   -- historique SCD2 (colonnes brutes)
+    WHERE dbt_valid_to IS NULL                          -- seulement la version en cours
 ),
-
 -- ---------------------------------------------------------------------
 -- CTE 2 : renommage FR + typage explicite (CAST) + nettoyage des textes
 -- Les URL (logos) et les colonnes techniques ne sont PAS nettoyées :
@@ -130,23 +130,8 @@ enrichi AS (
             ELSE 'Nul'
         END                                                       AS resultat
     FROM renomme
-),
-
-
-
-
--- ---------------------------------------------------------------------
--- CTE 4 : flag de version (aucun dépôt supprimé)
--- ---------------------------------------------------------------------
-final AS (
-    SELECT
-        *,
-        ROW_NUMBER() OVER (
-            PARTITION BY id_match                       -- un groupe par match
-            ORDER BY _date_depot DESC,                  -- le plus récent d'abord
-                     _fichier_source DESC               -- départage si même date
-        ) = 1                                                     AS est_derniere_version
-    FROM enrichi
 )
 
-SELECT * FROM final
+
+
+SELECT * FROM enrichi
