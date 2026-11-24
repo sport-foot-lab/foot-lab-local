@@ -1,0 +1,86 @@
+# =====================================================================
+# _dwh_silver.yml : tests des modèles du schéma dwh_silver
+# Tests GÉNÉRIQUES (intégrés à dbt, sans package) :
+#   unique        : aucune valeur en double dans la colonne
+#   not_null      : aucune valeur vide (NULL) dans la colonne
+#   relationships : chaque valeur existe dans une autre table (clé étrangère)
+# Lancer : dbt test --select dwh_silver   (depuis transformation\)
+# =====================================================================
+version: 2                                  # format des fichiers YAML de dbt (toujours 2)
+
+models:
+
+  # ---------------- Dimensions : la clé = 1 ligne par valeur ----------------
+  # unique + not_null = clé primaire -> côté « 1 » des relations 1 -> plusieurs
+  - name: dim_joueur
+    description: "Dimension joueur : 1 ligne par joueur (fiche joueur du projet 4)."
+    columns:
+      - name: id_joueur
+        description: "Clé de la dimension."
+        data_tests:
+          - unique
+          - not_null
+
+  - name: dim_equipe
+    description: "Dimension équipe partagée : 1 ligne par équipe (règle E3 pour le nom)."
+    columns:
+      - name: id_equipe
+        description: "Clé de la dimension."
+        data_tests:
+          - unique
+          - not_null
+
+  - name: dim_ligue
+    description: "Dimension ligue partagée : 1 ligne par ligue."
+    columns:
+      - name: id_ligue
+        description: "Clé de la dimension."
+        data_tests:
+          - unique
+          - not_null
+
+  - name: dim_saison
+    description: "Dimension saison partagée : 1 ligne par saison + libellé."
+    columns:
+      - name: saison
+        description: "Clé de la dimension."
+        data_tests:
+          - unique
+          - not_null
+
+  # ---------------- Fait : chaque clé existe dans sa dimension ----------------
+  # relationships : to = la dimension (ref), field = sa colonne clé
+  # -> aucune ligne orpheline dans Power BI
+  # La clé unique du fait (joueur × ligue × saison) est testée à part :
+  # tests\fait_stats_joueur_saison_cle_unique.sql
+  - name: fait_stats_joueur_saison
+    description: "Fait stats joueur du projet 4 : 1 ligne par joueur × ligue × saison."
+    columns:
+      - name: id_joueur
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_joueur')
+                field: id_joueur
+      - name: id_equipe
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_equipe')
+                field: id_equipe
+      - name: id_ligue
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_ligue')
+                field: id_ligue
+      - name: saison
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_saison')
+                field: saison
